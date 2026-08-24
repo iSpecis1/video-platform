@@ -1,0 +1,62 @@
+{
+  "summary": "Iteration 2 (unified Account+Channel identity) tested end-to-end. Backend: 36 pytest cases across /api/me, POST/PUT /api/channels, PUT /api/accounts/{id}, denormalized channel_name/channel_avatar propagation on videos+clips, plus full regression on videos/clips/search/follows/likes/history/upload/categories — 36/36 passed. Frontend: Playwright covered header account menu (Create your Channel vs Your Channel), @username in switcher, /channel/new prefill+previews, duplicate-handle 409 error surfacing, successful channel creation + redirect + unified username, /upload no-channel prompt -> upload form after creation, Settings public identity save with propagation to channel page, creator redirect away from /channel/new, kid-account learn-mode lock, and Home/Watch/Clips/Search regression. All listed acceptance criteria passed. Test data (qachannel01, TEST/QA videos) was cleaned and acc-viewer-01/acc-creator-01 restored to seed state.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "seed_data()", "issue": "All 10 seeded channels are assigned account_id='acc-creator-01', violating the 'one Account -> 0 or 1 Channel' invariant. Consequence: PUT /api/channels/{handle} on any of the other 9 channels (e.g. quantumlens) silently rewrites acc-creator-01's username/avatar, corrupting its identity."},
+      {"endpoint": "seed_data()", "issue": "Unified identity is violated in seed itself: acc-creator-01.username='codeatlas' while its channel name='Code Atlas'. Spec requires Account username == Channel name."},
+      {"endpoint": "POST /api/channels", "issue": "Sets account.username = channel display name verbatim, so usernames can contain spaces/uppercase (e.g. 'QA Channel One'), while Settings enforces ^[a-z0-9_-]{3,24}$ and lowercases. Inconsistent username rules between the two write paths; header then renders '@QA Channel One'."},
+      {"endpoint": "POST /api/channels", "issue": "Handle uniqueness/username uniqueness are checked with read-then-write (no unique index on channels.handle / accounts.username), so concurrent requests could create duplicates."},
+      {"endpoint": "POST /api/channels", "issue": "No length/charset bound on `name` and no min/max length on handle at API level (client enforces 3-24). A 1-char or 500-char name is accepted."},
+      {"endpoint": "POST /api/upload", "issue": "Upload is hardcoded to channel_handle='codeatlas'/'Code Atlas'/fixed avatar regardless of the publishing account's real channel. After iteration-2 real channels exist, so a new channel owner's uploads are attributed to Code Atlas (verified: video published as qachannel01 owner appeared under codeatlas)."},
+      {"endpoint": "/api/follows,/api/likes,/api/history,/api/following/feed", "issue": "All hardcode account_id='acc-viewer-01', so follows/likes/history do not follow the switched profile."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Channel.jsx", "issue": "Channel page is not owner-aware: viewing your OWN channel shows a 'Follow' button and there is no 'Edit channel' entry point. Consequence: PUT /api/channels/{handle} and AppContext.updateChannel (channel->account sync) are unreachable from the UI; bi-directional identity editing only works via API.", "selector": "[data-testid=\"channel-follow-btn\"]", "priority": "MEDIUM"},
+      {"component": "VideoCard.jsx", "issue": "React DOM validation error on every card render: nested <a> (channel Link inside the video-card Link) — 'In HTML, <a> cannot be a descendant of <a>'. Invalid markup / a11y issue and floods the console.", "selector": "[data-testid^=\"video-card-\"] a a", "priority": "MEDIUM"},
+      {"component": "Settings.jsx / Upload.jsx", "issue": "Console error: 'An empty string (\"\") was passed to the src attribute' — avatar <img> rendered before account loads (settings-avatar-preview / no-channel prompt). Use null/placeholder instead of empty string.", "selector": "[data-testid=\"settings-avatar-preview\"]", "priority": "LOW"},
+      {"component": "AppContext.switchAccount", "issue": "Switching from the learn-mode-locked kid profile back to a normal profile leaves Learn Mode forcibly ON with no reset, so the viewer profile silently stays filtered.", "selector": "[data-testid=\"switch-account-acc-viewer-01\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Channel page header", "issues": ["Channel avatar + name overlap the bottom edge of the banner; the avatar's top is visually clipped by the banner and the H1 sits directly on the image gradient, making the name look cramped/misaligned with the meta line below."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/conftest.py",
+    "/app/backend/tests/test_identity.py",
+    "/app/backend/tests/test_regression.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix seed: give each seeded channel a distinct owner account (or a synthetic owner id) so acc-creator-01 owns only codeatlas; otherwise PUT /api/channels on any seeded handle corrupts acc-creator-01's identity.",
+    "Align seed unified identity: acc-creator-01.username should equal its channel name (or channel name should equal username).",
+    "Unify username rules between POST /api/channels (uses raw display name) and PUT /api/accounts (lowercase, ^[a-z0-9_-]{3,24}$); validate name/handle length server-side.",
+    "Make /api/upload use the current account's real channel (handle/name/avatar) instead of hardcoded codeatlas.",
+    "Add owner-aware Channel page: hide Follow and expose 'Edit channel' (name/avatar/banner/bio) wired to updateChannel so channel->account propagation is reachable in the UI.",
+    "Fix nested <a> in VideoCard (channel link inside card link).",
+    "Avoid empty-string img src before account loads.",
+    "Optionally reset Learn Mode when switching away from a learn-mode-locked profile."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 827 lines with models, seed data and all routes in one file — split into models/, seed.py, routers/ before it grows further.",
+    "Identity sync logic is duplicated between update_account and update_channel (channel/account + videos/clips denormalization) — extract a single sync_identity(handle, name, avatar) helper to avoid drift.",
+    "No unique indexes on channels.handle or accounts.username; uniqueness is enforced only by read-then-write checks.",
+    "Denormalized channel_name/channel_avatar are also copied into db.history documents on write but are never re-synced on identity change, so History shows stale channel names.",
+    "Deprecated FastAPI @app.on_event('startup'/'shutdown') — migrate to lifespan handlers."
+  ],
+  "updated_files": [
+    "/app/backend/tests/conftest.py",
+    "/app/backend/tests/test_identity.py",
+    "/app/backend/tests/test_regression.py"
+  ],
+  "success_rate": {"backend": "100% (36/36 pytest cases)", "frontend": "100% of requested iteration-2 flows passed; 4 non-blocking UI/console defects found"},
+  "seed_data_creation": "Temporarily created channel qachannel01 (acc-viewer-01) plus TEST_/QA videos and mutated acc-creator-01 identity during sync tests. All were reverted: qachannel01 deleted, TEST/QA videos removed, acc-viewer-01 reset to @alexrivera/no channel, codeatlas channel+videos restored to seed values (verified: 10 channels, 59 videos, usernames alexrivera/codeatlas/user84238488998).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "No auth. Mock profiles: acc-viewer-01 (@alexrivera, no channel), acc-creator-01 (@codeatlas, owns codeatlas), acc-kid-01 (@user84238488998, learn-mode locked). Switch via account-menu-trigger -> switch-account-{id} or settings-switch-{id}.",
+  "context_for_next_testing_agent": "Run `pytest /app/backend/tests/ -q` (pytest.ini enforces -n 2 --dist loadscope; identity tests share a class so they stay sequential). test_identity.py::TestChannelCreation creates a channel for acc-viewer-01 with a random handle and will SKIP if the viewer already owns one — clean up with: mongosh test_database --eval 'db.channels.deleteMany({handle:/^testqa|^qachannel/}); db.accounts.updateOne({id:\"acc-viewer-01\"},{$set:{has_channel:false,channel_handle:null,username:\"alexrivera\",avatar:\"https://i.pravatar.cc/200?img=5\"}})'. TestAccountToChannelSync restores codeatlas via direct pymongo write. Frontend: Home renders 48 cards in both Normal and Learn Mode (40-limit feed + 8 trending) — this is NOT a filter bug; the API correctly returns 60 vs 40 approved videos.",
+  "rca_of_the_issue": "No functional defect in the iteration-2 feature set. The main latent risk is the seed assigning all 10 channels to acc-creator-01: because update_channel() writes back to channels.account_id's owner, editing any seeded channel (e.g. quantumlens) will overwrite acc-creator-01's username/avatar — a silent identity corruption path not covered by the one-channel-per-account guard in POST /api/channels (which only checks account.has_channel)."
+}

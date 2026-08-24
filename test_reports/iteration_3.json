@@ -1,0 +1,58 @@
+{
+  "summary": "Iteration 3 verification: all 9 issues reported in iteration_2.json are FIXED. Backend: 56 pytest cases (test_identity.py, test_regression.py + new test_iteration3.py) — 56/56 pass. Verified seed integrity (10 channels, only codeatlas -> acc-creator-01, all others 'seed-owner-*'), acc-creator-01.username == 'Code Atlas' == channel name, identity isolation (PUT /api/channels/quantumlens leaves acc-creator-01 untouched), bi-directional sync for the real owner (PUT /api/channels/codeatlas -> account username/avatar + denormalized channel_name/channel_avatar on videos+clips), POST /api/channels name/handle validation (400 for 1-char name, 'AB', 'bad handle', 25-char handle, 'bad@handle'; 409 dup handle; 409 second channel; happy path syncs account), PUT /api/accounts username validation (400 for 'A','has$dollar',41 chars,'with/slash'; 409 dup; 200 for 'Code Atlas Pro' with propagation to channel+videos+clips), POST /api/upload (400 for acc-viewer-01 without channel, 400 unknown account, 200 for acc-creator-01 with channel_handle='codeatlas'/channel_name='Code Atlas'). Frontend (Playwright, 1920x1080): owner-aware Channel page (YOU badge + Edit channel, no Follow) for acc-creator-01, viewer sees only Follow; EditChannelDialog rename propagates to H1 and header dropdown username; dialog client validation blocks 1-char name; VideoCard has ZERO 'nested <a>' warnings, card click -> /watch/{id}, channel avatar click -> /channel/{handle}; NO 'empty string was passed to src' warnings anywhere (Home/Settings/Upload no-channel prompt); Learn Mode now follows the switched profile (adult->kid forces ON + toggle disabled; kid->adult clears it, html.learn removed, localStorage false); Settings username accepts 'Alex Rivera' (saved, header shows @Alex Rivera) and rejects 'a$b'; creator UI upload published under codeatlas. All test data cleaned; DB restored to seed (10 channels, 59 videos, usernames alexrivera / Code Atlas / user84238488998).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/accounts/{id}", "issue": "Dead/no-op line: `await db.history.update_many({'account_id': account_id}, {'$set': {}})  # placeholder` — remove it; an empty $set is invalid Mongo and only survives because db.history is usually empty."},
+      {"endpoint": "PUT /api/accounts/{id} & PUT /api/channels/{handle}", "issue": "db.history documents keep a denormalized channel_name that is never re-synced on identity change, so History shows stale channel names (carried over from iteration 2)."},
+      {"endpoint": "/api/follows, /api/likes, /api/history, /api/following/feed", "issue": "Still hardcoded to account_id='acc-viewer-01', so follows/likes/history do not follow the switched profile (e.g. sidebar FOLLOWING list is identical for the kid and creator profiles)."},
+      {"endpoint": "POST /api/channels, PUT /api/accounts", "issue": "No unique index on channels.handle / accounts.username; uniqueness is read-then-write only (race window)."},
+      {"endpoint": "POST /api/channels", "issue": "Handle is lowercased before HANDLE_RE, so 'ABCDEF' is silently accepted as 'abcdef'. Acceptable as normalization, but the client should show the normalized handle to avoid surprise."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Home (VideoCard)", "issue": "The same video is rendered in both 'Trending now' and 'Recommended for you', producing duplicate data-testid values (video-card-{id} / video-card-channel-{id}) -> Playwright strict-mode violations. Consider section-scoped testids (e.g. video-card-trending-{id}).", "selector": "[data-testid^=\"video-card-\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Channel page header", "issues": ["Still unfixed from iteration 2: the avatar's top is clipped by the banner container (-mt-10 over an overflow-hidden banner) and the H1 sits on the banner gradient, so the name/meta block looks cramped and vertically misaligned with the 'Edit channel' button."]},
+      {"screen": "Upload / no-channel prompt", "issues": ["Prompt card is top-aligned leaving ~60% of the viewport empty on desktop; vertically centering or adding secondary content would look intentional."]},
+      {"screen": "Header account menu", "issues": ["Usernames are now display names with spaces but are still rendered with an '@' prefix ('@Code Atlas', '@Alex Rivera'), which reads like a handle. Consider showing the display name without '@' and '@{channel_handle}' separately."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration3.py",
+    "/app/backend/tests/test_identity.py",
+    "/app/backend/tests/test_regression.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Remove the no-op db.history.update_many({'$set': {}}) placeholder in update_account.",
+    "Re-sync (or stop denormalizing) channel_name in db.history so History does not show stale channel names.",
+    "Make follows/likes/history account-aware instead of hardcoding acc-viewer-01.",
+    "Fix Channel page header layout: avatar clipped by banner, H1 sitting on the gradient.",
+    "Optional: split server.py (868 lines) into models/seed/routers and extract a shared sync_identity(handle, name, avatar) helper (logic duplicated in update_account and update_channel)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 868 lines — models, seed data and all routes in one module; exceeds the 700-line guideline.",
+    "Identity sync (channel<->account + videos/clips denormalization) is duplicated in update_account and update_channel; drift risk — extract one helper.",
+    "Deprecated @app.on_event('startup'/'shutdown') — migrate to a lifespan handler.",
+    "seed_data() only runs when channels collection is empty; if accounts exist but channels were dropped, insert_many(accounts) would raise duplicate-key/duplicate personas — guard each collection independently.",
+    "No unique indexes on channels.handle / accounts.username."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration3.py",
+    "/app/backend/tests/test_identity.py",
+    "/app/backend/tests/test_regression.py",
+    "/app/backend/tests/conftest.py"
+  ],
+  "success_rate": {"backend": "100% (56/56 pytest cases)", "frontend": "100% of the 13 requested iteration-3 flows passed; only cosmetic issues remain"},
+  "seed_data_creation": "Temporary: channel testqa* for acc-viewer-01/acc-kid-01, TEST_ videos (API + UI upload), temporary renames of codeatlas/quantumlens and usernames. All reverted; final state verified: 10 channels with seed names, 59 videos, acc-viewer-01=@alexrivera/no channel, acc-creator-01='Code Atlas'/codeatlas, acc-kid-01=user84238488998/no channel.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No auth. Profiles: acc-viewer-01 (@alexrivera, no channel), acc-creator-01 ('Code Atlas', owns codeatlas), acc-kid-01 (user84238488998, learn mode locked). Switch via account-menu-trigger -> switch-account-{id} or localStorage vp_account_id.",
+  "context_for_next_testing_agent": "Run `pytest /app/backend/tests/ -q` (pytest.ini forces -n 2 --dist loadscope). conftest.py now has an autouse fcntl file-lock fixture (serialize_shared_state) because the whole suite mutates shared identity state (acc-creator-01/viewer/kid) and loadscope spreads classes across workers — without it 4 tests race and fail intermittently. Do not remove it. Mutating tests restore state via direct pymongo writes; if a run is interrupted mid-test, restore with: db.channels.update_one({handle:'quantumlens'},{$set:{name:'Quantum Lens',avatar:'https://i.pravatar.cc/200?img=12'}}), db.channels.update_one({handle:'codeatlas'},{$set:{name:'Code Atlas',avatar:'https://i.pravatar.cc/200?img=32'}}), accounts creator username 'Code Atlas', drop channels ^testqa and videos title ^TEST. Settings username testid is settings-username / settings-save-identity (NOT settings-username-input).",
+  "rca_of_the_issue": "No new defects. Two test failures seen during this run were test-suite artifacts, not app bugs: (1) test_identity.py::TestChannelCreation created a channel for acc-viewer-01 without cleanup, which made a later upload test (no account_id -> defaults to viewer) attribute to the leftover channel — fixed by adding a cleanup test and passing account_id explicitly; (2) 4 intermittent failures under the default 2-worker xdist run were cross-worker races on the shared creator identity — fixed with an inter-process lock in conftest."
+}

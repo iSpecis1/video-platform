@@ -1,0 +1,176 @@
+{
+  "theme_strategy": {
+    "decision": "Toggleable Light and Dark Themes. Platform utilizes an 'Archetype 4: Swiss & High-Contrast' base with specific color shifting to delineate 'Normal Mode' from 'Learn Mode'.",
+    "rationale": "High contrast ensures content (video thumbnails) pops out. Shifting the accent color and UI borders visually communicates Learn Mode without completely alienating the user layout."
+  },
+  "typography": {
+    "instructions_to_main_agent": "Import these fonts via Google Fonts in index.css: @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap');",
+    "headings": {
+      "family": "'Outfit', sans-serif",
+      "weight": "600, 700",
+      "letter_spacing": "tracking-tight"
+    },
+    "body": {
+      "family": "'Plus Jakarta Sans', sans-serif",
+      "weight": "400, 500",
+      "letter_spacing": "tracking-normal"
+    },
+    "hierarchy": {
+      "h1": "text-3xl sm:text-4xl font-bold tracking-tight",
+      "h2": "text-2xl sm:text-3xl font-semibold tracking-tight",
+      "h3": "text-xl font-semibold tracking-tight",
+      "body": "text-base",
+      "small": "text-sm text-muted-foreground",
+      "badge": "text-xs font-bold uppercase tracking-[0.1em]"
+    }
+  },
+  "colors": {
+    "normal_mode": {
+      "light": {
+        "background": "0 0% 98%",
+        "foreground": "240 10% 3.9%",
+        "primary": "243 75% 59%",
+        "primary_foreground": "0 0% 100%",
+        "muted": "240 4.8% 95.9%",
+        "border": "240 5.9% 90%"
+      },
+      "dark": {
+        "background": "240 10% 3.9%",
+        "foreground": "0 0% 98%",
+        "primary": "243 75% 59%",
+        "primary_foreground": "0 0% 100%",
+        "muted": "240 3.7% 15.9%",
+        "border": "240 3.7% 15.9%"
+      }
+    },
+    "learn_mode": {
+      "description": "When Learn Mode is active, override CSS variables in the body to shift to an Organic & Earthy archetype (Focus Emerald/Sage).",
+      "light": {
+        "primary": "160 84% 39%",
+        "primary_foreground": "0 0% 100%",
+        "background": "150 20% 98%"
+      },
+      "dark": {
+        "primary": "160 84% 39%",
+        "primary_foreground": "0 0% 100%",
+        "background": "160 10% 4%"
+      }
+    }
+  },
+  "visual_enhancers": {
+    "surfaces": "Use flat solid surfaces for video cards. Minimize card borders. For headers/nav, use 'Crystal Glass' effect (backdrop-blur-xl with bg-background/80 and 1px delicate inner stroke border-border/50).",
+    "borders": "1px subtle borders on grids and dividing sections. No heavy drop shadows on video thumbnails, rely on image content and border-radius.",
+    "radius": "Use rounded-xl (12px) for thumbnails and rounded-full for avatars. Buttons should be pill-shaped (rounded-full).",
+    "hover_states": "Subtle scale up (scale-105) on thumbnails, opacity shift on text, and explicit color shifts. Video thumbnails should have a dark overlay on hover to reveal play buttons or stats."
+  },
+  "component_name": {
+    "buttons": "Pill-shaped, bold padding (px-6 py-2).",
+    "learn_mode_toggle": "A prominent, pill-shaped switch in the header that morphs its icon (e.g., from 'Play' to 'Book/Brain') and color (Indigo to Emerald) when toggled.",
+    "video_card": "Cardless structure. Direct image container with rounded-xl, flex container below for avatar and text. Clean and dense.",
+    "sidebar": "Clean icon + text links. Highlight active state with a soft background pill in the primary color at 10% opacity.",
+    "category_pills": "Horizontal scrollable list of pill buttons (rounded-full) for categories."
+  },
+  "grids": {
+    "home_feed": "Dense Grid: grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5. Tight gap: gap-y-8 gap-x-4.",
+    "watch_page": "Asymmetric Grid: grid-cols-1 lg:grid-cols-12 gap-8. Player spans col-span-1 lg:col-span-8 or 9. Recommendations span col-span-1 lg:col-span-4 or 3.",
+    "clips_feed": "Centered, single column snap-scroll container. aspect-[9/16] height-full max-h-[80vh] md:max-h-[800px]."
+  },
+  "layouts": {
+    "header": "Sticky header (z-50) with Crystal Glass effect. Contains Logo (left), prominent Search bar (center, pill-shaped), and Right actions (Learn Mode Toggle, Create button, Notifications, Avatar).",
+    "main": "Sidebar on the left (fixed on desktop, hidden behind hamburger on mobile). Main content area right of the sidebar with generous padding (p-4 md:p-8)."
+  },
+  "motion": {
+    "transitions": "Use specific transitions. e.g., transition: transform 0.2s ease, opacity 0.2s ease. No transition-all.",
+    "hover_effects": "Thumbnails: transform scale-105 duration-300 ease-out.",
+    "learn_mode_switch": "Animate the background color change on the body when Learn Mode activates to visually enforce the state change."
+  },
+  "accessibility": {
+    "contrast": "Ensure text over thumbnails has a dark gradient overlay (bg-gradient-to-t from-black/80 to-transparent) to maintain APCA ratio.",
+    "test_ids": "Add data-testid attributes to all interactive elements (e.g., data-testid='learn-mode-toggle', data-testid='video-card-1', data-testid='search-input').",
+    "focus": "focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none."
+  },
+  "media": {
+    "aspect_ratios": "Standard videos: aspect-video (16:9). Clips: aspect-[9/16]. Avatars: aspect-square (1:1)."
+  },
+  "3d_libraries": {
+    "recommendation": "Not strictly necessary for the core MVP unless used for a creative onboarding/hero experience. Stick to clean 2D UI to maintain video focus."
+  },
+  "image_urls": {
+    "description": "Real image URLs mapped to VideoPlatform features. Use these for seeding the UI.",
+    "categories": [
+      {
+        "category": "Technology & Science",
+        "url": "https://images.unsplash.com/photo-1614179924047-e1ab49a0a0cf?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODh8MHwxfHNlYXJjaHwzfHx0ZWNobm9sb2d5JTIwc2NpZW5jZSUyMGdhbWluZyUyMGRlc2t8ZW58MHx8fHwxNzg3MjMxODY4fDA&ixlib=rb-4.1.0&q=85",
+        "usage": "Thumbnail"
+      },
+      {
+        "category": "Gaming",
+        "url": "https://images.unsplash.com/photo-1542751371-adc38448a05e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODh8MHwxfHNlYXJjaHwxfHx0ZWNobm9sb2d5JTIwc2NpZW5jZSUyMGdhbWluZyUyMGRlc2t8ZW58MHx8fHwxNzg3MjMxODY4fDA&ixlib=rb-4.1.0&q=85",
+        "usage": "Thumbnail"
+      },
+      {
+        "category": "Travel & Geography",
+        "url": "https://images.unsplash.com/photo-1625472603517-1b0dc72846ab?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODF8MHwxfHNlYXJjaHwzfHxiZWF1dGlmdWwlMjB0cmF2ZWwlMjBuYXR1cmUlMjBsYW5kc2NhcGV8ZW58MHx8fHwxNzg3MjMxODY4fDA&ixlib=rb-4.1.0&q=85",
+        "usage": "Thumbnail"
+      },
+      {
+        "category": "Nature Documentary",
+        "url": "https://images.pexels.com/photos/17553812/pexels-photo-17553812.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "usage": "Thumbnail"
+      },
+      {
+        "category": "History & Culture",
+        "url": "https://images.pexels.com/photos/33863615/pexels-photo-33863615.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "usage": "Thumbnail"
+      },
+      {
+        "category": "General Programming",
+        "url": "https://images.unsplash.com/photo-1626218174358-7769486c4b79?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODh8MHwxfHNlYXJjaHwyfHx0ZWNobm9sb2d5JTIwc2NpZW5jZSUyMGdhbWluZyUyMGRlc2t8ZW58MHx8fHwxNzg3MjMxODY4fDA&ixlib=rb-4.1.0&q=85",
+        "usage": "Thumbnail"
+      }
+    ],
+    "avatars": [
+      {
+        "category": "Creator 1",
+        "url": "https://images.unsplash.com/photo-1620246499808-d9fe1b7858dc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODh8MHwxfHNlYXJjaHwzfHxkaXZlcnNlJTIwcGVvcGxlJTIwcHJvZmVzc2lvbmFsJTIwcG9ydHJhaXR8ZW58MHx8fHwxNzg3MjMxODY4fDA&ixlib=rb-4.1.0&q=85",
+        "usage": "Channel Avatar"
+      },
+      {
+        "category": "Creator 2",
+        "url": "https://images.unsplash.com/photo-1656313815939-6373a497bbf2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODh8MHwxfHNlYXJjaHw0fHxkaXZlcnNlJTIwcGVvcGxlJTIwcHJvZmVzc2lvbmFsJTIwcG9ydHJhaXR8ZW58MHx8fHwxNzg3MjMxODY4fDA&ixlib=rb-4.1.0&q=85",
+        "usage": "Channel Avatar"
+      },
+      {
+        "category": "Creator 3",
+        "url": "https://images.unsplash.com/photo-1607990283143-e81e7a2c9349?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODh8MHwxfHNlYXJjaHwyfHxkaXZlcnNlJTIwcGVvcGxlJTIwcHJvZmVzc2lvbmFsJTIwcG9ydHJhaXR8ZW58MHx8fHwxNzg3MjMxODY4fDA&ixlib=rb-4.1.0&q=85",
+        "usage": "Channel Avatar"
+      }
+    ],
+    "banners": [
+      {
+        "category": "Channel Banner 1",
+        "url": "https://images.unsplash.com/photo-1617634667039-8e4cb277ab46?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODF8MHwxfHNlYXJjaHwxfHxiZWF1dGlmdWwlMjB0cmF2ZWwlMjBuYXR1cmUlMjBsYW5kc2NhcGV8ZW58MHx8fHwxNzg3MjMxODY4fDA&ixlib=rb-4.1.0&q=85",
+        "usage": "Channel Banner"
+      },
+      {
+        "category": "Channel Banner 2",
+        "url": "https://images.unsplash.com/photo-1482689860904-c5747d0c8995?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODF8MHwxfHNlYXJjaHwyfHxiZWF1dGlmdWwlMjB0cmF2ZWwlMjBuYXR1cmUlMjBsYW5kc2NhcGV8ZW58MHx8fHwxNzg3MjMxODY4fDA&ixlib=rb-4.1.0&q=85",
+        "usage": "Channel Banner"
+      }
+    ]
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. In frontend design, this creates what users call the 'AI slop' aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur) for sticky navs and overlays. Do not use pure transparent backgrounds.",
+    "You MUST NOT apply universal transition. Eg: transition: all. Always add transitions for specific interactive elements like button, input excluding transforms.",
+    "You MUST NOT center align the app container. Do not add .App { text-align: center; } in the css file.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style.",
+    "NEVER: use AI assistant Emoji characters like robot, brain, etc for icons. Use lucide-react.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "All interactive and key informational elements MUST include a data-testid attribute to facilitate robust automated testing."
+  ]
+}
