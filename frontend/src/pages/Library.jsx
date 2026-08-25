@@ -9,11 +9,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 export default function Library() {
   const [history, setHistory] = useState([]);
   const [liked, setLiked] = useState([]);
-  const { likes } = useApp();
+  const { likes, account } = useApp();
 
   useEffect(() => {
-    api.history().then(setHistory);
-  }, []);
+    if (!account) return;
+    api.history(account.id).then(setHistory);
+  }, [account]);
 
   useEffect(() => {
     (async () => {

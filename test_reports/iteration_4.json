@@ -1,0 +1,53 @@
+{
+  "summary": "Iteration 4 (Friends system) tested end-to-end. Backend: created /app/backend/tests/test_friends.py (37 tests) covering seed (6 accounts / real channel owners), GET /api/relationship/{handle} (friends, follow-back, self, plain-follow, 404s), GET /api/friends (creator=2, viewer/kid/flavorfield=[]), GET /api/friends/feed (videos+clips restricted to friend handles, learn_mode filter, sort order), GET /api/followers (4 followers with correct is_mutual flags), mutual toggle + unfriend flows (self-restoring), per-profile isolation of follows/likes/history, and core-endpoint regression. Full backend suite = 93/93 passing. Frontend: verified /friends no-channel state (viewer + kid), 3 tabs with correct counts, 2 friend cards + unfriend, 4 follower cards with 'Follow back' on flavorfield and 'Friends' on mutual entries, channel-follow-btn data-rel states (owner/friends/follow-back/follow), full Follow back -> Friends -> unfollow round trip with /friends count going 2->3->2, sidebar nav-friends after Following, account switch resetting Learn Mode, and mobile layout. Found and fixed one crash: /library threw 'account is not defined' (missing destructure in Library.jsx). All mutated data restored (follows table byte-identical to seed, likes=0, no TEST_ videos).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/friends, /api/followers, /api/relationship/{handle}", "issue": "account_id is a plain query param with a hardcoded DEFAULT_ACCOUNT fallback; an unknown account_id silently returns empty lists on /friends and /followers instead of 404 (relationship correctly 404s). Inconsistent error semantics."},
+      {"endpoint": "GET /api/friends/feed", "issue": "limit is applied separately to videos and clips (single 'limit' param controls both lists), which is ambiguous for pagination later."},
+      {"endpoint": "GET /api/following/feed", "issue": "Endpoint still lazily re-seeds default follows for acc-viewer-01 when its follow list is empty (side-effecting GET). Harmless now but will silently resurrect follows the user deliberately removed."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Library page", "issue": "FIXED BY TESTER: `const { likes } = useApp()` omitted `account`, so /library crashed with ReferenceError: account is not defined (blank white screen + react-error-overlay). Regression from the iteration-4 per-account refactor.", "selector": "/library route", "priority": "HIGH"},
+      {"component": "Friends.jsx FriendCard", "issue": "Friend card is a <Link> to the channel with a nested unfriend <button>; the button relies on e.preventDefault() to suppress navigation. It works, but the affordance is fragile/nested-interactive (a11y). Button label says 'Unfollow' while the review request calls it an unfriend button — consider 'Unfriend' for clarity.", "selector": "[data-testid^=\"friend-unfriend-\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Friends page (Feed tab)", "issues": ["No error state: api.friendsFeed/api.followers failures are swallowed (no .catch on followers, no error UI), so a backend failure renders an indistinguishable 'empty' page."]},
+      {"screen": "Channel page header", "issues": ["Channel h1 sits on the banner/gradient boundary (-mt-10) and the large title visually touches the banner edge on 1920px; slightly tight but legible."]},
+      {"screen": "Seeded content relevance", "issues": ["Thumbnail/topic mismatch persists from seed randomization (e.g. 'Why quantum entanglement is real' uses a food photo, 'Learn to read a financial statement' sits on Flavor Field cooking channel). Cosmetic only, pre-existing."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_friends.py",
+    "/app/backend/tests/test_iteration3.py",
+    "/app/backend/tests/test_identity.py",
+    "/app/test_reports/pytest/iteration4_final.xml"
+  ],
+  "action_items": [
+    "Review the Library.jsx one-line fix applied by tester (added `account` to useApp destructure) and audit remaining pages for the same missing-destructure pattern after per-account refactors.",
+    "Add error/failure states to Friends.jsx for friendsFeed/followers API calls (currently failures render as empty state).",
+    "Optional: return 404 for unknown account_id on /api/friends and /api/followers for consistency with /api/relationship.",
+    "Optional: remove the side-effecting default-follow seeding inside GET /api/following/feed."
+  ],
+  "critical_code_review_comments": [
+    "Library.jsx used `account` without destructuring it from useApp() — this class of bug is invisible until the route is visited; consider an ESLint no-undef gate in CI (eslint already flags it).",
+    "_friend_account_ids() runs 3 sequential queries per call and is invoked by /friends, /friends/feed and /followers; fine for a prototype but should be a single aggregation before real data volumes.",
+    "Friends.jsx useEffect depends on the whole `friends` array object; every refreshFriends() re-creates the array and re-triggers friendsFeed + followers fetches. Works, but causes duplicate network calls per toggle."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_friends.py (new, 37 tests)",
+    "/app/backend/tests/test_iteration3.py (updated stale iteration-3 expectations: real channel owners now include the 3 friend accounts; identity-isolation test switched from quantumlens to openbench because quantumlens now has a real owner and the old test leaked TESTQL* into acc-friend-01)",
+    "/app/backend/tests/test_identity.py (account count 3 -> 6)",
+    "/app/frontend/src/pages/Library.jsx (added missing `account` destructure)"
+  ],
+  "success_rate": {"backend": "100% (93/93)", "frontend": "97% (all Friends-system flows pass; 1 route crash found and fixed)"},
+  "seed_data_creation": "No new seed data. All mutations were self-restoring; verified follows collection is byte-identical to the 10 seeded rows, likes=0, no TEST_ videos/channels left. Repaired acc-friend-01 identity (username/avatar) that a stale iteration-3 test had corrupted to 'TESTQL95113'.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No auth. Profiles: acc-viewer-01, acc-creator-01, acc-kid-01, acc-friend-01/02/03. Switch via account-menu-trigger -> switch-account-{id} or localStorage 'vp_account_id'.",
+  "context_for_next_testing_agent": "Run `pytest /app/backend/tests/ -q` (pytest.ini already sets -n 2 --dist loadscope; conftest has a file lock serializing shared-state mutations). test_friends.py covers all iteration-4 Friends endpoints and restores its own state. Beware: tests that PUT a channel now also mutate the owning ACCOUNT identity for codeatlas/quantumlens/chroniclepath/flavorfield — always restore accounts.username/avatar too, otherwise the friends seed assertions break. Frontend account switching via localStorage.setItem('vp_account_id', id) + reload works reliably. Remaining untested: notifications bell, Clips swipe interactions, playlists tab.",
+  "rca_of_the_issue": "/library blank screen RCA: iteration 4 moved history to a per-account API (api.history(account.id)). Library.jsx was updated to call it inside a useEffect keyed on `account`, but `account` was never added to the `const { likes } = useApp()` destructure, so the component threw ReferenceError on first render and CRA's error overlay replaced the page. Fix: destructure `account` from useApp(). Verified /library now renders History/Liked/Playlists tabs for both viewer and creator with per-account data and zero console errors."
+}

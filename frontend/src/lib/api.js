@@ -5,6 +5,9 @@ export const API = `${BACKEND_URL}/api`;
 
 export const http = axios.create({ baseURL: API });
 
+// Helper: merge account_id into params
+const withAcc = (accountId, extra = {}) => ({ params: { account_id: accountId, ...extra } });
+
 export const api = {
   categories: (learn_mode) => http.get("/categories", { params: { learn_mode } }).then((r) => r.data),
   me: () => http.get("/me").then((r) => r.data),
@@ -18,15 +21,19 @@ export const api = {
   channelVideos: (handle, learn_mode) => http.get(`/channels/${handle}/videos`, { params: { learn_mode } }).then((r) => r.data),
   channelClips: (handle, learn_mode) => http.get(`/channels/${handle}/clips`, { params: { learn_mode } }).then((r) => r.data),
   search: (q, learn_mode, type = "all") => http.get("/search", { params: { q, learn_mode, type } }).then((r) => r.data),
-  followingFeed: (learn_mode) => http.get("/following/feed", { params: { learn_mode } }).then((r) => r.data),
-  follows: () => http.get("/follows").then((r) => r.data),
-  toggleFollow: (channel_handle, follow) => http.post("/follows", { channel_handle, follow }).then((r) => r.data),
-  likes: () => http.get("/likes").then((r) => r.data),
-  toggleLike: (video_id, liked) => http.post("/likes", { video_id, liked }).then((r) => r.data),
-  history: () => http.get("/history").then((r) => r.data),
-  addHistory: (id) => http.post(`/history/${id}`).then((r) => r.data),
+  followingFeed: (accountId, learn_mode) => http.get("/following/feed", withAcc(accountId, { learn_mode })).then((r) => r.data),
+  follows: (accountId) => http.get("/follows", withAcc(accountId)).then((r) => r.data),
+  toggleFollow: (accountId, channel_handle, follow) => http.post("/follows", { account_id: accountId, channel_handle, follow }).then((r) => r.data),
+  likes: (accountId) => http.get("/likes", withAcc(accountId)).then((r) => r.data),
+  toggleLike: (accountId, video_id, liked) => http.post("/likes", { account_id: accountId, video_id, liked }).then((r) => r.data),
+  history: (accountId) => http.get("/history", withAcc(accountId)).then((r) => r.data),
+  addHistory: (accountId, id) => http.post(`/history/${id}`, null, withAcc(accountId)).then((r) => r.data),
   upload: (payload) => http.post("/upload", payload).then((r) => r.data),
   updateAccount: (id, patch) => http.put(`/accounts/${id}`, patch).then((r) => r.data),
   createChannel: (payload) => http.post("/channels", payload).then((r) => r.data),
   updateChannel: (handle, patch) => http.put(`/channels/${handle}`, patch).then((r) => r.data),
+  friends: (accountId) => http.get("/friends", withAcc(accountId)).then((r) => r.data),
+  friendsFeed: (accountId, learn_mode) => http.get("/friends/feed", withAcc(accountId, { learn_mode })).then((r) => r.data),
+  followers: (accountId) => http.get("/followers", withAcc(accountId)).then((r) => r.data),
+  relationship: (handle, accountId) => http.get(`/relationship/${handle}`, withAcc(accountId)).then((r) => r.data),
 };

@@ -22,7 +22,7 @@ const Rail = ({ title, icon: Icon, videos }) => (
 );
 
 export default function Home() {
-  const { learnMode } = useApp();
+  const { learnMode, account } = useApp();
   const [category, setCategory] = useState("All");
   const [videos, setVideos] = useState(null);
   const [trending, setTrending] = useState([]);
@@ -34,9 +34,10 @@ export default function Home() {
   }, [learnMode, category]);
 
   useEffect(() => {
+    if (!account) return;
     api.listVideos({ learn_mode: learnMode, sort: "trending", limit: 10 }).then(setTrending);
-    api.history().then((h) => setContinueWatching(h || [])).catch(() => setContinueWatching([]));
-  }, [learnMode]);
+    api.history(account.id).then((h) => setContinueWatching(h || [])).catch(() => setContinueWatching([]));
+  }, [learnMode, account]);
 
   return (
     <div className="fade-up">

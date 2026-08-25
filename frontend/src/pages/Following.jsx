@@ -5,14 +5,15 @@ import { VideoCard, VideoCardSkeleton } from "@/components/VideoCard";
 import { Link } from "react-router-dom";
 
 export default function Following() {
-  const { learnMode, follows, toggleFollow } = useApp();
+  const { learnMode, follows, toggleFollow, account } = useApp();
   const [feed, setFeed] = useState(null);
   const [channels, setChannels] = useState([]);
 
   useEffect(() => {
-    api.followingFeed(learnMode).then((r) => setFeed(r.videos));
+    if (!account) return;
+    api.followingFeed(account.id, learnMode).then((r) => setFeed(r.videos));
     api.listChannels().then(setChannels);
-  }, [learnMode]);
+  }, [learnMode, account]);
 
   const following = channels.filter((c) => follows.includes(c.handle));
 

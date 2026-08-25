@@ -18,15 +18,16 @@ def get_account(client, acc_id):
 
 # ---------------- GET /api/me ---------------- #
 class TestMe:
-    def test_me_returns_three_accounts_with_usernames(self, api_client):
+    def test_me_returns_seeded_accounts_with_usernames(self, api_client):
         r = api_client.get(f"{API}/me")
         assert r.status_code == 200
         data = r.json()
         assert "accounts" in data and "current" in data
         accounts = data["accounts"]
-        assert len(accounts) == 3, f"expected 3 accounts got {len(accounts)}"
+        # Iteration 4 seed grew to 6 accounts (3 friend personas added)
+        assert len(accounts) == 6, f"expected 6 accounts got {len(accounts)}"
         by_id = {a["id"]: a for a in accounts}
-        assert set(by_id) == {VIEWER, CREATOR, KID}
+        assert {VIEWER, CREATOR, KID}.issubset(set(by_id))
         for a in accounts:
             assert isinstance(a.get("username"), str) and a["username"]
             assert "_id" not in a

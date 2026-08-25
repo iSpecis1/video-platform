@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { BadgeCheck, Pencil } from "lucide-react";
+import { BadgeCheck, Pencil, Heart, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatViews } from "@/lib/format";
 import { toast } from "sonner";
@@ -36,6 +36,7 @@ export default function Channel() {
   const [videos, setVideos] = useState([]);
   const [clips, setClips] = useState([]);
   const [editOpen, setEditOpen] = useState(false);
+  const [rel, setRel] = useState({ is_following: false, is_follower: false, is_friend: false, is_self: false });
 
   useEffect(() => {
     api.getChannel(handle).then(setChannel).catch(() => setChannel(null));
@@ -43,12 +44,16 @@ export default function Channel() {
     api.channelClips(handle, learnMode).then(setClips);
   }, [handle, learnMode]);
 
+  useEffect(() => {
+    if (!account) return;
+    api.relationship(handle, account.id).then(setRel).catch(() => {});
+  }, [handle, account, follows]);
+
   if (!channel) {
     return <div className="text-muted-foreground">Loading channel…</div>;
   }
 
-  const isOwner = account?.has_channel && account?.channel_handle === channel.handle;
-  const isFollowing = follows.includes(channel.handle);
+  const isOwner = rel.is_self || (account?.has_channel && account?.channel_handle === channel.handle);
 
   const handleSaved = async (patch) => {
     try {
@@ -98,16 +103,7 @@ export default function Channel() {
             <Pencil className="h-4 w-4" /> Edit channel
           </button>
         ) : (
-          <button
-            onClick={() => toggleFollow(channel.handle)}
-            data-testid="channel-follow-btn"
-            className={cn(
-              "self-start rounded-full px-5 py-2 text-sm font-semibold transition-colors sm:self-end",
-              isFollowing ? "bg-secondary text-foreground border border-border" : "bg-foreground text-background"
-            )}
-          >
-            {isFollowing ? "Following" : "Follow"}
-          </button>
+          <RelationshipButton channel={channel} rel={rel} onToggle={() => toggleFollow(channel.handle)} />
         )}
       </div>
 
@@ -206,6 +202,48 @@ const Grid = ({ videos }) => (
     {videos.length === 0 && <p className="col-span-full text-sm text-muted-foreground">Nothing here yet.</p>}
   </div>
 );
+
+
+const RelationshipButton = ({ channel, rel, onToggle }) => {
+  // States: friend, follow-back (they follow me, I don't), following, follow (default)
+  let label = "Follow";
+  let variant = "primary";
+  let Icon = null;
+  if (rel.is_friend) {
+    label = "Friends";
+    variant = "friends";
+    Icon = Heart;
+  } else if (rel.is_follower && !rel.is_following) {
+    label = "Follow back";
+    variant = "back";
+    Icon = UserPlus;
+  } else if (rel.is_following) {
+    label = "Following";
+    variant = "following";
+  }
+
+  const styles = {
+    primary: "bg-foreground text-background",
+    following: "bg-secondary text-foreground border border-border",
+    back: "bg-primary text-primary-foreground learn-glow",
+    friends: "bg-primary/10 text-primary border border-primary/40",
+  };
+
+  return (
+    <button
+      onClick={onToggle}
+      data-testid="channel-follow-btn"
+      data-rel={rel.is_friend ? "friends" : rel.is_following ? "following" : rel.is_follower ? "follow-back" : "follow"}
+      className={cn(
+        "inline-flex items-center gap-1.5 self-start rounded-full px-5 py-2 text-sm font-semibold transition-colors sm:self-end",
+        styles[variant]
+      )}
+    >
+      {Icon && <Icon className={cn("h-4 w-4", rel.is_friend && "fill-current")} />}
+      {label}
+    </button>
+  );
+};
 
 
 const EditChannelDialog = ({ open, onOpenChange, channel, onSaved }) => {

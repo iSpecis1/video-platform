@@ -14,6 +14,7 @@ export const AppProvider = ({ children }) => {
   const [account, setAccount] = useState(null);
   const [follows, setFollows] = useState([]);
   const [likes, setLikes] = useState([]);
+  const [friends, setFriends] = useState([]);
 
   // Apply body classes for theme + learn mode
   useEffect(() => {
@@ -24,7 +25,7 @@ export const AppProvider = ({ children }) => {
     localStorage.setItem(LEARN_KEY, String(learnMode));
   }, [theme, learnMode]);
 
-  // Load account and follows/likes on mount
+  // Load accounts on mount
   useEffect(() => {
     (async () => {
       try {
@@ -37,28 +38,39 @@ export const AppProvider = ({ children }) => {
       } catch (e) {
         console.warn("Failed to load /me", e);
       }
+    })();
+  }, []);
+
+  // Reload per-account state whenever the active account changes
+  useEffect(() => {
+    if (!account) return;
+    (async () => {
       try {
-        const f = await api.follows();
+        const f = await api.follows(account.id);
         setFollows(f.channel_handles || []);
       } catch (err) {
         console.warn("follows load failed", err);
       }
       try {
-        const l = await api.likes();
+        const l = await api.likes(account.id);
         setLikes(l.video_ids || []);
       } catch (err) {
         console.warn("likes load failed", err);
       }
+      try {
+        const r = await api.friends(account.id);
+        setFriends(r.friends || []);
+      } catch (err) {
+        console.warn("friends load failed", err);
+      }
     })();
-  }, []);
+  }, [account]);
 
   const switchAccount = useCallback((id) => {
     const next = accounts.find((a) => a.id === id);
     if (!next) return;
     setAccount(next);
     localStorage.setItem(ACCOUNT_KEY, id);
-    // Match Learn Mode to the new account: locked profiles force ON,
-    // switching to an unlocked profile resets to OFF unless user re-enables.
     setLearnMode(!!next.learn_mode_locked);
     localStorage.setItem(LEARN_KEY, String(!!next.learn_mode_locked));
   }, [accounts]);
@@ -68,26 +80,37 @@ export const AppProvider = ({ children }) => {
     setLearnMode((v) => !v);
   }, [account]);
 
+  const refreshFriends = useCallback(async () => {
+    if (!account) return;
+    try {
+      const r = await api.friends(account.id);
+      setFriends(r.friends || []);
+    } catch {}
+  }, [account]);
+
   const toggleFollow = useCallback(async (handle) => {
+    if (!account) return;
     const isFollowing = follows.includes(handle);
     setFollows((prev) => (isFollowing ? prev.filter((h) => h !== handle) : [...prev, handle]));
     try {
-      await api.toggleFollow(handle, !isFollowing);
+      await api.toggleFollow(account.id, handle, !isFollowing);
+      // Friendship may have changed — refresh friend list
+      refreshFriends();
     } catch (e) {
-      // rollback
       setFollows((prev) => (isFollowing ? [...prev, handle] : prev.filter((h) => h !== handle)));
     }
-  }, [follows]);
+  }, [follows, account, refreshFriends]);
 
   const toggleLike = useCallback(async (videoId) => {
+    if (!account) return;
     const isLiked = likes.includes(videoId);
     setLikes((prev) => (isLiked ? prev.filter((id) => id !== videoId) : [...prev, videoId]));
     try {
-      await api.toggleLike(videoId, !isLiked);
+      await api.toggleLike(account.id, videoId, !isLiked);
     } catch (e) {
       setLikes((prev) => (isLiked ? [...prev, videoId] : prev.filter((id) => id !== videoId)));
     }
-  }, [likes]);
+  }, [likes, account]);
 
   const updateAccount = useCallback(async (patch) => {
     if (!account) return null;
@@ -100,7 +123,6 @@ export const AppProvider = ({ children }) => {
   const createChannel = useCallback(async (payload) => {
     if (!account) throw new Error("No account");
     const res = await api.createChannel({ ...payload, account_id: account.id });
-    // Refresh account (server updated username/avatar for unified identity)
     const { accounts: refreshed } = await api.me();
     setAccounts(refreshed);
     const me = refreshed.find((a) => a.id === account.id);
@@ -110,7 +132,6 @@ export const AppProvider = ({ children }) => {
 
   const updateChannel = useCallback(async (handle, patch) => {
     const updated = await api.updateChannel(handle, patch);
-    // Refresh account to keep unified identity in sync
     const { accounts: refreshed } = await api.me();
     setAccounts(refreshed);
     const me = refreshed.find((a) => a.id === account?.id);
@@ -135,8 +156,10 @@ export const AppProvider = ({ children }) => {
       updateAccount,
       createChannel,
       updateChannel,
+      friends,
+      refreshFriends,
     }),
-    [learnMode, theme, account, accounts, follows, likes, toggleLearnMode, switchAccount, toggleFollow, toggleLike, updateAccount, createChannel, updateChannel]
+    [learnMode, theme, account, accounts, follows, likes, friends, toggleLearnMode, switchAccount, toggleFollow, toggleLike, updateAccount, createChannel, updateChannel, refreshFriends]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

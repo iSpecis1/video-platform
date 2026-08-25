@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Film, GraduationCap, Users, Library, Upload, Settings, ShieldCheck } from "lucide-react";
+import { Home, Film, GraduationCap, Users, Library, Upload, Settings, ShieldCheck, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
 
@@ -9,6 +9,7 @@ const items = [
   { to: "/clips", label: "Clips", icon: Film, testid: "nav-clips" },
   { to: "/learn", label: "Learn", icon: GraduationCap, testid: "nav-learn" },
   { to: "/following", label: "Following", icon: Users, testid: "nav-following" },
+  { to: "/friends", label: "Friends", icon: Heart, testid: "nav-friends" },
   { to: "/library", label: "Library", icon: Library, testid: "nav-library" },
 ];
 

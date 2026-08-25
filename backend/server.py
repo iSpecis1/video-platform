@@ -127,11 +127,13 @@ class UploadRequest(BaseModel):
 class FollowRequest(BaseModel):
     channel_handle: str
     follow: bool
+    account_id: Optional[str] = None
 
 
 class LikeRequest(BaseModel):
     video_id: str
     liked: bool
+    account_id: Optional[str] = None
 
 
 # ---------------- Seed Data ---------------- #
@@ -304,20 +306,63 @@ async def seed_data():
             "learn_mode_locked": True,
             "theme": "light",
         },
+        {
+            "id": "acc-friend-01",
+            "name": "Priya Nair",
+            "username": "Quantum Lens",
+            "email": "priya@videoplatform.dev",
+            "avatar": AVATAR_POOL[0],
+            "has_channel": True,
+            "channel_handle": "quantumlens",
+            "learn_mode_locked": False,
+            "theme": "dark",
+        },
+        {
+            "id": "acc-friend-02",
+            "name": "Marcus Alder",
+            "username": "Chronicle Path",
+            "email": "marcus@videoplatform.dev",
+            "avatar": AVATAR_POOL[2],
+            "has_channel": True,
+            "channel_handle": "chroniclepath",
+            "learn_mode_locked": False,
+            "theme": "dark",
+        },
+        {
+            "id": "acc-friend-03",
+            "name": "Noor Haddad",
+            "username": "Flavor Field",
+            "email": "noor@videoplatform.dev",
+            "avatar": AVATAR_POOL[3],
+            "has_channel": True,
+            "channel_handle": "flavorfield",
+            "learn_mode_locked": False,
+            "theme": "dark",
+        },
     ]
     await db.accounts.insert_many(accounts)
 
-    # Channels — codeatlas is owned by acc-creator-01; others get synthetic owner ids
-    # so identity-sync writes never touch real user accounts.
+    # Channels — real owners for codeatlas, quantumlens, chroniclepath, flavorfield.
+    # Rest keep synthetic seed-owner ids so identity-sync writes never touch a real user.
+    real_owners = {
+        "codeatlas": "acc-creator-01",
+        "quantumlens": "acc-friend-01",
+        "chroniclepath": "acc-friend-02",
+        "flavorfield": "acc-friend-03",
+    }
     channels = []
     for i, seed in enumerate(CHANNEL_SEED):
-        owner_id = "acc-creator-01" if seed["handle"] == "codeatlas" else f"seed-owner-{seed['handle']}"
+        owner_id = real_owners.get(seed["handle"], f"seed-owner-{seed['handle']}")
+        # Real owners use the account's avatar so unified identity holds from day one.
+        real_avatar = None
+        if owner_id in real_owners.values():
+            real_avatar = next(a["avatar"] for a in accounts if a["id"] == owner_id)
         channels.append(
             {
                 "id": str(uuid.uuid4()),
                 "handle": seed["handle"],
                 "name": seed["name"],
-                "avatar": _rand_choice(AVATAR_POOL, i),
+                "avatar": real_avatar or _rand_choice(AVATAR_POOL, i),
                 "banner": _rand_choice(BANNER_POOL, i),
                 "bio": seed["bio"],
                 "followers": random.randint(12_400, 4_800_000),
@@ -328,6 +373,14 @@ async def seed_data():
             }
         )
     await db.channels.insert_many(channels)
+
+    # Also align each real owner account's username & avatar with their channel display name/avatar
+    for handle, aid in real_owners.items():
+        ch = next(c for c in channels if c["handle"] == handle)
+        await db.accounts.update_one(
+            {"id": aid},
+            {"$set": {"username": ch["name"], "avatar": ch["avatar"]}},
+        )
 
     # Videos
     videos = []
@@ -423,8 +476,31 @@ async def seed_data():
     if comments:
         await db.comments.insert_many(comments)
 
-    logger.info("Seed complete: %d channels, %d videos, %d clips, %d comments",
-                len(channels), len(videos), len(clips), len(comments))
+    # Seed mutual follows so the Friends system has demo state:
+    #   creator (codeatlas) <-> quantumlens = FRIENDS
+    #   creator (codeatlas) <-> chroniclepath = FRIENDS
+    #   flavorfield follows creator (codeatlas) but not vice versa => "Follow back"
+    seed_follows = [
+        # creator follows two other creators
+        {"account_id": "acc-creator-01", "channel_handle": "quantumlens"},
+        {"account_id": "acc-creator-01", "channel_handle": "chroniclepath"},
+        # they follow the creator back
+        {"account_id": "acc-friend-01", "channel_handle": "codeatlas"},
+        {"account_id": "acc-friend-02", "channel_handle": "codeatlas"},
+        # flavorfield follows the creator (creator hasn't followed back yet)
+        {"account_id": "acc-friend-03", "channel_handle": "codeatlas"},
+        # quantumlens & chroniclepath are also friends
+        {"account_id": "acc-friend-01", "channel_handle": "chroniclepath"},
+        {"account_id": "acc-friend-02", "channel_handle": "quantumlens"},
+        # default viewer follows a few channels
+        {"account_id": "acc-viewer-01", "channel_handle": "quantumlens"},
+        {"account_id": "acc-viewer-01", "channel_handle": "codeatlas"},
+        {"account_id": "acc-viewer-01", "channel_handle": "chroniclepath"},
+    ]
+    await db.follows.insert_many(seed_follows)
+
+    logger.info("Seed complete: %d channels, %d videos, %d clips, %d comments, %d follows",
+                len(channels), len(videos), len(clips), len(comments), len(seed_follows))
 
 
 # ---------------- Helpers ---------------- #
@@ -720,14 +796,42 @@ async def search(q: str = Query(...), learn_mode: bool = False, type: str = "all
     return {"videos": v_hits, "clips": c_hits, "channels": ch_hits}
 
 
+DEFAULT_ACCOUNT = "acc-viewer-01"
+
+
+async def _friend_account_ids(account_id: str) -> list:
+    """Return account ids that mutually follow with `account_id` (i.e., friends)."""
+    acc = await db.accounts.find_one({"id": account_id}, {"_id": 0})
+    if not acc or not acc.get("channel_handle"):
+        return []
+    my_handle = acc["channel_handle"]
+
+    # Everyone I follow (channel handles)
+    my_follows = await db.follows.find({"account_id": account_id}, {"_id": 0}).to_list(500)
+    handles_i_follow = {f["channel_handle"] for f in my_follows}
+
+    # Everyone who follows me (accounts that follow my channel)
+    followers = await db.follows.find({"channel_handle": my_handle}, {"_id": 0}).to_list(500)
+    ids_follow_me = {f["account_id"] for f in followers if f["account_id"] != account_id}
+
+    # For each id following me, check if I follow their channel
+    friend_ids = []
+    if ids_follow_me:
+        accts = await db.accounts.find({"id": {"$in": list(ids_follow_me)}}, {"_id": 0}).to_list(200)
+        for a in accts:
+            if a.get("channel_handle") and a["channel_handle"] in handles_i_follow:
+                friend_ids.append(a["id"])
+    return friend_ids
+
+
 @api_router.get("/following/feed")
-async def following_feed(learn_mode: bool = False, limit: int = 30):
-    follows = await db.follows.find({"account_id": "acc-viewer-01"}, {"_id": 0}).to_list(200)
-    if not follows:
-        # default: seed a couple of follows for a nicer first experience
+async def following_feed(account_id: str = DEFAULT_ACCOUNT, learn_mode: bool = False, limit: int = 30):
+    follows = await db.follows.find({"account_id": account_id}, {"_id": 0}).to_list(200)
+    if not follows and account_id == DEFAULT_ACCOUNT:
+        # Seed a couple of default follows for the default viewer only.
         default_handles = ["quantumlens", "codeatlas", "chroniclepath"]
         for h in default_handles:
-            await db.follows.insert_one({"account_id": "acc-viewer-01", "channel_handle": h})
+            await db.follows.insert_one({"account_id": account_id, "channel_handle": h})
         follows = [{"channel_handle": h} for h in default_handles]
     handles = [f["channel_handle"] for f in follows]
     docs = await db.videos.find({"channel_handle": {"$in": handles}, "is_clip": False}, {"_id": 0}).to_list(200)
@@ -737,54 +841,56 @@ async def following_feed(learn_mode: bool = False, limit: int = 30):
 
 
 @api_router.get("/follows")
-async def get_follows():
-    docs = await db.follows.find({"account_id": "acc-viewer-01"}, {"_id": 0}).to_list(200)
+async def get_follows(account_id: str = DEFAULT_ACCOUNT):
+    docs = await db.follows.find({"account_id": account_id}, {"_id": 0}).to_list(200)
     return {"channel_handles": [d["channel_handle"] for d in docs]}
 
 
 @api_router.post("/follows")
 async def toggle_follow(req: FollowRequest):
+    account_id = req.account_id or DEFAULT_ACCOUNT
     if req.follow:
-        exists = await db.follows.find_one({"account_id": "acc-viewer-01", "channel_handle": req.channel_handle})
+        exists = await db.follows.find_one({"account_id": account_id, "channel_handle": req.channel_handle})
         if not exists:
-            await db.follows.insert_one({"account_id": "acc-viewer-01", "channel_handle": req.channel_handle})
+            await db.follows.insert_one({"account_id": account_id, "channel_handle": req.channel_handle})
     else:
-        await db.follows.delete_many({"account_id": "acc-viewer-01", "channel_handle": req.channel_handle})
+        await db.follows.delete_many({"account_id": account_id, "channel_handle": req.channel_handle})
     return {"ok": True, "channel_handle": req.channel_handle, "following": req.follow}
 
 
 @api_router.get("/likes")
-async def get_likes():
-    docs = await db.likes.find({"account_id": "acc-viewer-01"}, {"_id": 0}).to_list(200)
+async def get_likes(account_id: str = DEFAULT_ACCOUNT):
+    docs = await db.likes.find({"account_id": account_id}, {"_id": 0}).to_list(200)
     return {"video_ids": [d["video_id"] for d in docs]}
 
 
 @api_router.post("/likes")
 async def toggle_like(req: LikeRequest):
+    account_id = req.account_id or DEFAULT_ACCOUNT
     if req.liked:
-        exists = await db.likes.find_one({"account_id": "acc-viewer-01", "video_id": req.video_id})
+        exists = await db.likes.find_one({"account_id": account_id, "video_id": req.video_id})
         if not exists:
-            await db.likes.insert_one({"account_id": "acc-viewer-01", "video_id": req.video_id})
+            await db.likes.insert_one({"account_id": account_id, "video_id": req.video_id})
     else:
-        await db.likes.delete_many({"account_id": "acc-viewer-01", "video_id": req.video_id})
+        await db.likes.delete_many({"account_id": account_id, "video_id": req.video_id})
     return {"ok": True, "video_id": req.video_id, "liked": req.liked}
 
 
 @api_router.get("/history")
-async def get_history():
-    docs = await db.history.find({"account_id": "acc-viewer-01"}, {"_id": 0}).to_list(200)
+async def get_history(account_id: str = DEFAULT_ACCOUNT):
+    docs = await db.history.find({"account_id": account_id}, {"_id": 0}).to_list(200)
     docs.sort(key=lambda x: x.get("watched_at", ""), reverse=True)
     return docs
 
 
 @api_router.post("/history/{video_id}")
-async def add_history(video_id: str):
+async def add_history(video_id: str, account_id: str = DEFAULT_ACCOUNT):
     v = await db.videos.find_one({"id": video_id}, {"_id": 0}) or await db.clips.find_one({"id": video_id}, {"_id": 0})
     if not v:
         raise HTTPException(status_code=404, detail="Video not found")
-    await db.history.delete_many({"account_id": "acc-viewer-01", "video_id": video_id})
+    await db.history.delete_many({"account_id": account_id, "video_id": video_id})
     await db.history.insert_one({
-        "account_id": "acc-viewer-01",
+        "account_id": account_id,
         "video_id": video_id,
         "title": v["title"],
         "thumbnail": v["thumbnail"],
@@ -792,6 +898,98 @@ async def add_history(video_id: str):
         "watched_at": datetime.now(timezone.utc).isoformat(),
     })
     return {"ok": True}
+
+
+# ------------- Friends (derived from mutual follows) ------------- #
+
+async def _account_public(acc: dict) -> dict:
+    """Return only the public identity fields for an account (name, avatar, handle)."""
+    return {
+        "id": acc["id"],
+        "username": acc.get("username") or acc.get("name"),
+        "avatar": acc.get("avatar"),
+        "channel_handle": acc.get("channel_handle"),
+    }
+
+
+@api_router.get("/friends")
+async def get_friends(account_id: str = DEFAULT_ACCOUNT):
+    ids = await _friend_account_ids(account_id)
+    if not ids:
+        return {"friends": []}
+    accts = await db.accounts.find({"id": {"$in": ids}}, {"_id": 0}).to_list(200)
+    return {"friends": [await _account_public(a) for a in accts]}
+
+
+@api_router.get("/friends/feed")
+async def get_friends_feed(account_id: str = DEFAULT_ACCOUNT, learn_mode: bool = False, limit: int = 40):
+    ids = await _friend_account_ids(account_id)
+    if not ids:
+        return {"videos": [], "clips": [], "friend_handles": []}
+    accts = await db.accounts.find({"id": {"$in": ids}}, {"_id": 0}).to_list(200)
+    handles = [a["channel_handle"] for a in accts if a.get("channel_handle")]
+
+    vids = await db.videos.find({"channel_handle": {"$in": handles}, "is_clip": False}, {"_id": 0}).to_list(400)
+    vids = _apply_learn_mode(vids, learn_mode)
+    vids.sort(key=lambda x: x["published_at"], reverse=True)
+
+    clips = await db.clips.find({"channel_handle": {"$in": handles}}, {"_id": 0}).to_list(200)
+    clips = _apply_learn_mode(clips, learn_mode)
+    clips.sort(key=lambda x: x["published_at"], reverse=True)
+
+    return {"videos": vids[:limit], "clips": clips[:limit], "friend_handles": handles}
+
+
+@api_router.get("/followers")
+async def get_followers(account_id: str = DEFAULT_ACCOUNT):
+    """Accounts following the current account's channel, with is_mutual flag."""
+    acc = await db.accounts.find_one({"id": account_id}, {"_id": 0})
+    if not acc or not acc.get("channel_handle"):
+        return {"followers": []}
+    handle = acc["channel_handle"]
+
+    follower_rows = await db.follows.find({"channel_handle": handle}, {"_id": 0}).to_list(500)
+    follower_ids = list({r["account_id"] for r in follower_rows if r["account_id"] != account_id})
+    if not follower_ids:
+        return {"followers": []}
+
+    # What I follow (handles) — for mutual check
+    my_rows = await db.follows.find({"account_id": account_id}, {"_id": 0}).to_list(500)
+    my_handles = {r["channel_handle"] for r in my_rows}
+
+    accts = await db.accounts.find({"id": {"$in": follower_ids}}, {"_id": 0}).to_list(200)
+    out = []
+    for a in accts:
+        pub = await _account_public(a)
+        pub["is_mutual"] = bool(a.get("channel_handle") and a["channel_handle"] in my_handles)
+        out.append(pub)
+    return {"followers": out}
+
+
+@api_router.get("/relationship/{handle}")
+async def get_relationship(handle: str, account_id: str = DEFAULT_ACCOUNT):
+    """Relationship between the requesting account and the channel handle."""
+    ch = await db.channels.find_one({"handle": handle}, {"_id": 0})
+    if not ch:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    me = await db.accounts.find_one({"id": account_id}, {"_id": 0})
+    if not me:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    is_self = me.get("channel_handle") == handle
+    is_following = bool(await db.follows.find_one({"account_id": account_id, "channel_handle": handle}))
+    # They follow me back only if I have a channel AND their owner account follows my channel
+    is_follower = False
+    if me.get("channel_handle") and ch.get("account_id"):
+        is_follower = bool(await db.follows.find_one({"account_id": ch["account_id"], "channel_handle": me["channel_handle"]}))
+    is_friend = bool(is_following and is_follower)
+    return {
+        "handle": handle,
+        "is_self": is_self,
+        "is_following": is_following,
+        "is_follower": is_follower,
+        "is_friend": is_friend,
+    }
 
 
 @api_router.post("/upload")

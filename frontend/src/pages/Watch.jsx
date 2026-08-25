@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 
 export default function Watch() {
   const { id } = useParams();
-  const { learnMode, toggleLike, likes, toggleFollow, follows } = useApp();
+  const { learnMode, toggleLike, likes, toggleFollow, follows, account } = useApp();
   const [video, setVideo] = useState(null);
   const [recommended, setRecommended] = useState([]);
   const [comments, setComments] = useState([]);
@@ -20,11 +20,11 @@ export default function Watch() {
     setExpandDesc(false);
     api.getVideo(id).then((v) => {
       setVideo(v);
-      api.addHistory(id).catch(() => {});
+      if (account) api.addHistory(account.id, id).catch(() => {});
     });
     api.recommended(id, learnMode).then(setRecommended);
     api.comments(id).then(setComments);
-  }, [id, learnMode]);
+  }, [id, learnMode, account]);
 
   if (!video) {
     return <div className="animate-pulse text-muted-foreground">Loading video…</div>;

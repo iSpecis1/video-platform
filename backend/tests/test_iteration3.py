@@ -36,10 +36,17 @@ class TestSeedIntegrity:
             "quantumlens", "codeatlas", "chroniclepath", "flavorfield", "boardroombasics",
             "wildframedoc", "pixelforge", "roadless", "toneline", "openbench"}]
         assert len(seeded) == 10
+        # Iteration 4: 4 channels have real owner accounts, the rest stay synthetic
+        real_owners = {
+            "codeatlas": CREATOR,
+            "quantumlens": "acc-friend-01",
+            "chroniclepath": "acc-friend-02",
+            "flavorfield": "acc-friend-03",
+        }
         for c in seeded:
             assert "_id" not in c
-            if c["handle"] == "codeatlas":
-                assert c["account_id"] == CREATOR
+            if c["handle"] in real_owners:
+                assert c["account_id"] == real_owners[c["handle"]]
             else:
                 assert c["account_id"].startswith("seed-owner-"), \
                     f"{c['handle']} owned by {c['account_id']}"
@@ -60,9 +67,10 @@ class TestSeedIntegrity:
 class TestIdentityIsolation:
     def test_put_seed_channel_does_not_touch_creator(self, api_client):
         before = get_account(api_client, CREATOR)
-        orig = api_client.get(f"{API}/channels/quantumlens").json()
-        new_name = f"TESTQL{uuid.uuid4().hex[:5]}"
-        r = api_client.put(f"{API}/channels/quantumlens",
+        # openbench keeps a synthetic seed-owner id (quantumlens now has a real owner)
+        orig = api_client.get(f"{API}/channels/openbench").json()
+        new_name = f"TESTOB{uuid.uuid4().hex[:5]}"
+        r = api_client.put(f"{API}/channels/openbench",
                            json={"name": new_name, "avatar": "https://i.pravatar.cc/200?img=44"})
         assert r.status_code == 200, r.text
         assert r.json()["name"] == new_name
@@ -71,16 +79,16 @@ class TestIdentityIsolation:
         assert after["username"] == before["username"], "creator username was corrupted"
         assert after["avatar"] == before["avatar"], "creator avatar was corrupted"
 
-        # restore quantumlens seed values
+        # restore openbench seed values
         cli, dbn = _mongo()
-        dbn.channels.update_one({"handle": "quantumlens"},
+        dbn.channels.update_one({"handle": "openbench"},
                                 {"$set": {"name": orig["name"], "avatar": orig["avatar"]}})
-        dbn.videos.update_many({"channel_handle": "quantumlens"},
+        dbn.videos.update_many({"channel_handle": "openbench"},
                                {"$set": {"channel_name": orig["name"], "channel_avatar": orig["avatar"]}})
-        dbn.clips.update_many({"channel_handle": "quantumlens"},
+        dbn.clips.update_many({"channel_handle": "openbench"},
                               {"$set": {"channel_name": orig["name"], "channel_avatar": orig["avatar"]}})
         cli.close()
-        assert api_client.get(f"{API}/channels/quantumlens").json()["name"] == orig["name"]
+        assert api_client.get(f"{API}/channels/openbench").json()["name"] == orig["name"]
 
     def test_put_codeatlas_syncs_creator(self, api_client):
         orig_ch = api_client.get(f"{API}/channels/codeatlas").json()

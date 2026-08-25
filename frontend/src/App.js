@@ -16,6 +16,7 @@ import Upload from "@/pages/Upload";
 import Settings from "@/pages/Settings";
 import ParentalControls from "@/pages/ParentalControls";
 import CreateChannel from "@/pages/CreateChannel";
+import Friends from "@/pages/Friends";
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
             <Route path="/clips" element={<Clips />} />
             <Route path="/learn" element={<Learn />} />
             <Route path="/following" element={<Following />} />
+            <Route path="/friends" element={<Friends />} />
             <Route path="/library" element={<Library />} />
             <Route path="/watch/:id" element={<Watch />} />
             <Route path="/channel/new" element={<CreateChannel />} />
